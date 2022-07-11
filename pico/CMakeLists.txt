@@ -13,10 +13,9 @@ set(CMAKE_CXX_STANDARD 17)
 pico_sdk_init()
 
 # Tell CMake where to find the executable source file
-
-
 add_executable(${PROJECT_NAME}
         main.cpp
+        Gcode_sender.cpp
 )
 
 # Create map/bin/hex file etc.
