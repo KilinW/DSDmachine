@@ -8,6 +8,6 @@ void moveTo(char* code_buffer, float x, float y){
 };
 
 void moveTo(char* code_buffer, float x, float y, float speed){
-    sprintf(code_buffer, "G01X%fY%fF%f", x, y ,v); 
+    sprintf(code_buffer, "G01X%fY%fF%f", x, y, speed); 
     return;
 };

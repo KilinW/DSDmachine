@@ -16,6 +16,9 @@ pico_sdk_init()
 add_executable(${PROJECT_NAME}
         main.cpp
         Gcode_sender.cpp
+        Gcode_sender.h
+        pump.cpp
+        pump.h
 )
 
 # Create map/bin/hex file etc.
@@ -27,5 +30,5 @@ target_link_libraries(${PROJECT_NAME}
 )
 
 # Enable usb output, disable uart output
-pico_enable_stdio_usb(${PROJECT_NAME} 1)
-pico_enable_stdio_uart(${PROJECT_NAME} 0)
+pico_enable_stdio_usb(${PROJECT_NAME} 0)
+pico_enable_stdio_uart(${PROJECT_NAME} 1)
