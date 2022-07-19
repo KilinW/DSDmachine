@@ -11,8 +11,8 @@
 // datasheet for information on which other pins can be used.
 #define PC_UART_TX_PIN 0
 #define PC_UART_RX_PIN 1
-#define GRBL_UART_TX_PIN 6
-#define GRBL_UART_RX_PIN 7
+#define GRBL_UART_TX_PIN 4
+#define GRBL_UART_RX_PIN 5
 #define LED_PIN 25
 
 static char pc_buffer[1024];
@@ -25,10 +25,18 @@ void pc_print(const char* content){
     return;
 };
 
+void grbl_print(const char* content){
+    uart_puts(GRBL_UART_ID, content);
+    return;
+};
+
 bool pc_command_intepret(const char* command){
     switch(command[0]){
         case '#':
             grbl_sender.operate_pc_command(pc_buffer);
+            return true;
+        case '$':
+            grbl_print(&pc_buffer[1]);
             return true;
         default:
             return false;
@@ -42,11 +50,8 @@ void on_grbl_uart_rx(){
         buffer_index++;
     };
     grbl_buffer[buffer_index] = '\0';
-    //
-
-    // Unfinished
-
-    //
+    pc_print(grbl_buffer);
+    return;
 };
 
 void on_pc_uart_rx(){
@@ -59,37 +64,38 @@ void on_pc_uart_rx(){
     pc_print("Command Received: ");
     pc_print(pc_buffer);
     pc_print("\n");
-    //
-    if(!pc_command_intepret(pc_buffer)){
-        pc_print("ERROR: Command Not Recognized");
-    };
-    // Unfinished
 
-    //
+    if(!pc_command_intepret(pc_buffer)){
+        pc_print("ERROR: Command Not Recognized\n");
+    };
+    return;
 };
 
 int main(){
-    // Initialise UART 0
-    gpio_init(LED_PIN);
-    gpio_set_dir(LED_PIN, GPIO_OUT);
 
-    uart_init(PC_UART_ID, BAUD_RATE);
-    uart_init(GRBL_UART_ID, BAUD_RATE);
+    //Set up UART port for  Pico <=> PC and Pico <=> GRBL. 
+    uart_init(PC_UART_ID, BAUD_RATE);               //Initialize UART
+    uart_init(GRBL_UART_ID, BAUD_RATE);             　
 
+    //Set gpio function on specific pin
     gpio_set_function(PC_UART_TX_PIN, GPIO_FUNC_UART);
     gpio_set_function(PC_UART_RX_PIN, GPIO_FUNC_UART);
-    gpio_set_function(GRBL_UART_RX_PIN, GPIO_FUNC_UART);
-    gpio_set_function(GRBL_UART_TX_PIN, GPIO_FUNC_UART);         
+    gpio_set_function(GRBL_UART_TX_PIN, GPIO_FUNC_UART);
+    gpio_set_function(GRBL_UART_RX_PIN, GPIO_FUNC_UART);         
 
+    //Set up interrupt function and enable it
     irq_set_exclusive_handler(UART0_IRQ, on_pc_uart_rx);
     irq_set_enabled(UART0_IRQ, true);
-    
     irq_set_exclusive_handler(UART1_IRQ, on_grbl_uart_rx);
     irq_set_enabled(UART1_IRQ, true);
 
+    //Enable interrupt when input and disable when output
     uart_set_irq_enables(PC_UART_ID, true, false);
     uart_set_irq_enables(GRBL_UART_ID, true, false);
 
+    
+
+    //Main loop
     while (true) {
         tight_loop_contents();
     }
