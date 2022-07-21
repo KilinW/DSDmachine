@@ -2,6 +2,7 @@
 #include "pico/stdlib.h"
 #include "hardware/uart.h"
 #include "Gcode_sender.h"
+#include "hardware/gpio.h"
 
 #define PC_UART_ID uart0                // Computer <=> Pico
 #define GRBL_UART_ID uart1              // Grbl <=> Pico
@@ -13,6 +14,8 @@
 #define PC_UART_RX_PIN 1
 #define GRBL_UART_TX_PIN 4
 #define GRBL_UART_RX_PIN 5
+#define hall_x_axis 10
+#define hall_y_axis 11
 #define LED_PIN 25
 
 static char pc_buffer[1024];
@@ -37,7 +40,7 @@ bool pc_command_intepret(const char* command){
             return true;
         case '$':
             grbl_print(&pc_buffer[1]);
-            return true;
+
         default:
             return false;
     }
@@ -71,11 +74,17 @@ void on_pc_uart_rx(){
     return;
 };
 
-int main(){
+void on_xy_reach_limit(uint gpio, uint32_t events){
+
+};
+
+
+
+void io_init(){
 
     //Set up UART port for  Pico <=> PC and Pico <=> GRBL. 
     uart_init(PC_UART_ID, BAUD_RATE);               //Initialize UART
-    uart_init(GRBL_UART_ID, BAUD_RATE);             　
+    uart_init(GRBL_UART_ID, BAUD_RATE);             
 
     //Set gpio function on specific pin
     gpio_set_function(PC_UART_TX_PIN, GPIO_FUNC_UART);
@@ -93,8 +102,23 @@ int main(){
     uart_set_irq_enables(PC_UART_ID, true, false);
     uart_set_irq_enables(GRBL_UART_ID, true, false);
 
-    
+    //Limit switch sensor init
+    gpio_init(hall_x_axis);
+    gpio_init(hall_y_axis);
 
+    //Set hall sensor to pull up
+    gpio_pull_up(hall_x_axis);
+    gpio_pull_up(hall_y_axis);
+
+    //Set hall sensor interrupt callback
+    gpio_set_irq_enabled_with_callback(hall_x_axis, GPIO_IRQ_EDGE_FALL, true, on_xy_reach_limit);
+    gpio_set_irq_enabled_with_callback(hall_y_axis, GPIO_IRQ_EDGE_FALL, true, on_xy_reach_limit);
+};
+
+int main(){
+
+    io_init();
+    
     //Main loop
     while (true) {
         tight_loop_contents();
