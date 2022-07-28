@@ -27,6 +27,13 @@ pico_add_extra_outputs(${PROJECT_NAME})
 # pull in common dependencies
 target_link_libraries(${PROJECT_NAME}
         pico_stdlib
+        pico_multicore
+        hardware_adc
+        hardware_dma
+        hardware_uart
+        hardware_gpio
+        hardware_pio
+        hardware
 )
 
 # Enable usb output, disable uart output
