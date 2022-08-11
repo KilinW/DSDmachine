@@ -20,6 +20,7 @@ class Gcode_sender{
         void moveTo(char* code_buffer, float x, float y);
         void moveTo(char* code_buffer, float x, float y, float speed);
         void operate_pc_command(char* pcbuffer);
+        float pwm_scale(char* pc_buffer);
 };
 
 
