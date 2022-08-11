@@ -1,7 +1,10 @@
 #include <stdio.h>
 #include "pico/stdlib.h"
 #include "hardware/uart.h"
+#include "Gcode_sender.h"
+#include "pump.h"
 #include "hardware/gpio.h"
+#include "hardware/pwm.h"
 
 //Include adc header
 #include "hardware/adc.h"
@@ -25,6 +28,10 @@
 #define GRBL_UART_RX_PIN 5
 #define HALL_X_AXIS 10
 #define HALL_Y_AXIS 11
+#define LED_PIN 25
+#define PUMP_FREQ_PIN 6
+#define PUMP_VOLT_PIN 7
+
 
 //Oscilloscope input channel
 #define ADC_INPUT_CHANNEL 0                  // It's channel 26+"0", which is the first adc channel
@@ -37,6 +44,7 @@ uint8_t adc_buffer[ADC_BUFFER_DEPTH];
 // TODO: Pull GPIO23 high to reduce the noise of adc
 
 Gcode_sender grbl_sender(GRBL_UART_ID);
+Pump drop_gen(PUMP_FREQ_PIN, PUMP_VOLT_PIN);
 
 void pc_print(const char* content){
     uart_puts(PC_UART_ID, content);
@@ -48,14 +56,16 @@ void grbl_print(const char* content){
     return;
 };
 
-bool pc_command_intepret(const char* command){
+bool pc_command_intepret(char* command){
     switch(command[0]){
         case '#':
             grbl_sender.operate_pc_command(pc_buffer);
             return true;
         case '$':
-            grbl_print(&pc_buffer[1]);
-
+            grbl_print(&command[1]);
+        case '@':
+            drop_gen.setfreq(atof(&command[1]));
+            return true;
         default:
             return false;
     }
@@ -91,6 +101,9 @@ void on_pc_uart_rx(){
 
 void on_xy_reach_limit(uint gpio, uint32_t events){
     pc_print("Magnent approached");
+    if(gpio==10 && events==GPIO_IRQ_EDGE_FALL){
+        uart_putc(PC_UART_ID, (char)0x85);
+    }
 };
 
 
@@ -105,7 +118,8 @@ void io_init(){
     gpio_set_function(PC_UART_TX_PIN, GPIO_FUNC_UART);
     gpio_set_function(PC_UART_RX_PIN, GPIO_FUNC_UART);
     gpio_set_function(GRBL_UART_TX_PIN, GPIO_FUNC_UART);
-    gpio_set_function(GRBL_UART_RX_PIN, GPIO_FUNC_UART);         
+    gpio_set_function(GRBL_UART_RX_PIN, GPIO_FUNC_UART);
+    
 
     // Set up interrupt function and enable it
     irq_set_exclusive_handler(UART0_IRQ, on_pc_uart_rx);
@@ -172,6 +186,11 @@ void io_init(){
     adc_run(false);
     adc_fifo_drain();
     */
+    //Set hall sensor interrupt callback
+    gpio_set_irq_enabled_with_callback(HALL_X_AXIS, GPIO_IRQ_EDGE_FALL, true, on_xy_reach_limit);
+    gpio_set_irq_enabled_with_callback(HALL_Y_AXIS, GPIO_IRQ_EDGE_FALL, true, on_xy_reach_limit);
+
+    drop_gen.enable();
 };
 
 int main(){

@@ -20,6 +20,6 @@ void Gcode_sender::operate_pc_command(char* pcbuffer){
     float x = atof(strtok(&pcbuffer[1], " "));
     float y = atof(strtok(NULL," "));
     this->moveTo(grbl_send_buffer, x, y);
-    this->send_gcode(grbl_send_buffer);
     return;
 };
+

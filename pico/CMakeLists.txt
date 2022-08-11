@@ -33,6 +33,8 @@ target_link_libraries(${PROJECT_NAME}
         hardware_uart
         hardware_gpio
         hardware_pio
+        hardware_gpio
+        hardware_uart
         hardware_pwm
 )
 
