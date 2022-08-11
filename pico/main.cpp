@@ -28,7 +28,7 @@
 
 //Oscilloscope input channel
 #define ADC_INPUT_CHANNEL 0                  // It's channel 26+"0", which is the first adc channel
-#define ADC_BUFFER_DEPTH 1000
+#define ADC_BUFFER_DEPTH 1
 
 char pc_buffer[1024];
 char grbl_buffer[1024];
@@ -149,7 +149,7 @@ void io_init(){
     // Reset something in dma_channel_get_default_config.
     channel_config_set_transfer_data_size(&dma_cfg, DMA_SIZE_8);
     channel_config_set_read_increment(&dma_cfg, false);
-    channel_config_set_write_increment(&dma_cfg, true);
+    channel_config_set_write_increment(&dma_cfg, false);
 
     // Reset the source of data transfer request
     channel_config_set_dreq(&dma_cfg, DREQ_ADC);
@@ -160,12 +160,24 @@ void io_init(){
         ADC_BUFFER_DEPTH,       // transfer count
         true                    // start immediately
     );
+
+    grbl_print("Starting capture\n");
+    adc_run(true);
+
+    // Once DMA finishes, stop any new conversions from starting, and clean up
+    // the FIFO in case the ADC was still mid-conversion.
+    /*
+    dma_channel_wait_for_finish_blocking(dma_chan);
+    grbl_print("Capture finished\n");
+    adc_run(false);
+    adc_fifo_drain();
+    */
 };
 
 int main(){
 
     io_init();
-    
+
     //Main loop
     while (true) {
         tight_loop_contents();
