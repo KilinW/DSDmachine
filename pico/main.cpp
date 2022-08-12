@@ -2,7 +2,7 @@
 #include "pico/stdlib.h"
 #include "hardware/uart.h"
 #include "Gcode_sender.h"
-#include "pump.h"
+#include "pwm_unit.h"
 #include "hardware/gpio.h"
 #include "hardware/pwm.h"
 
@@ -31,11 +31,14 @@
 #define LED_PIN 25
 #define PUMP_FREQ_PIN 6
 #define PUMP_VOLT_PIN 7
+#define SIGNAL_SIMUL_PIN 8
 
 
 //Oscilloscope input channel
 #define ADC_INPUT_CHANNEL 0                  // It's channel 26+"0", which is the first adc channel
 #define ADC_BUFFER_DEPTH 1
+
+uint dma_chan;
 
 char pc_buffer[1024];
 char grbl_buffer[1024];
@@ -44,7 +47,9 @@ uint8_t adc_buffer[ADC_BUFFER_DEPTH];
 // TODO: Pull GPIO23 high to reduce the noise of adc
 
 Gcode_sender grbl_sender(GRBL_UART_ID);
-Pump drop_gen(PUMP_FREQ_PIN, PUMP_VOLT_PIN);
+Pwm_unit signal_simulate(SIGNAL_SIMUL_PIN);
+Pwm_unit drop_gen_freq(PUMP_FREQ_PIN);
+Pwm_unit drop_gen_volt(PUMP_VOLT_PIN);
 
 void pc_print(const char* content){
     uart_puts(PC_UART_ID, content);
@@ -64,7 +69,7 @@ bool pc_command_intepret(char* command){
         case '$':
             grbl_print(&command[1]);
         case '@':
-            drop_gen.setfreq(atof(&command[1]));
+            drop_gen_freq.set_clkdiv(atof(&command[1]));
             return true;
         default:
             return false;
@@ -106,10 +111,7 @@ void on_xy_reach_limit(uint gpio, uint32_t events){
     }
 };
 
-
-
-void io_init(){
-
+void pc_uart_init(){
     // Set up UART port for  Pico <=> PC and Pico <=> GRBL. 
     uart_init(PC_UART_ID, BAUD_RATE);               // Initialize UART
     uart_init(GRBL_UART_ID, BAUD_RATE);             
@@ -119,7 +121,6 @@ void io_init(){
     gpio_set_function(PC_UART_RX_PIN, GPIO_FUNC_UART);
     gpio_set_function(GRBL_UART_TX_PIN, GPIO_FUNC_UART);
     gpio_set_function(GRBL_UART_RX_PIN, GPIO_FUNC_UART);
-    
 
     // Set up interrupt function and enable it
     irq_set_exclusive_handler(UART0_IRQ, on_pc_uart_rx);
@@ -130,7 +131,9 @@ void io_init(){
     // Enable interrupt when input and disable when output
     uart_set_irq_enables(PC_UART_ID, true, false);
     uart_set_irq_enables(GRBL_UART_ID, true, false);
+};
 
+void hall_sensor_init(){
     // Limit switch sensor init
     gpio_init(HALL_X_AXIS);
     gpio_init(HALL_Y_AXIS);
@@ -142,7 +145,22 @@ void io_init(){
     // Set hall sensor interrupt callback
     gpio_set_irq_enabled_with_callback(HALL_X_AXIS, GPIO_IRQ_EDGE_FALL, true, on_xy_reach_limit);
     gpio_set_irq_enabled_with_callback(HALL_Y_AXIS, GPIO_IRQ_EDGE_FALL, true, on_xy_reach_limit);
+};
 
+void on_pizo_dma_finished(){
+    signal_simulate.set_duty(adc_buffer[0]);
+    dma_hw->ints0 = 1u << dma_chan;
+    dma_channel_set_write_addr(dma_chan, &adc_buffer[0], true);
+};
+
+void signal_simulate_init(){
+    signal_simulate.set_warp(255);
+    signal_simulate.set_duty(128);
+    signal_simulate.set_clkdiv(1.0);
+    signal_simulate.enable();
+};
+
+void piezo_adc_init(){
     // ADC input init
     adc_init();
     adc_gpio_init(26 + ADC_INPUT_CHANNEL);
@@ -157,7 +175,7 @@ void io_init(){
     adc_set_clkdiv(0);
 
     // Setting up DMA
-    uint dma_chan = dma_claim_unused_channel(true);
+    dma_chan = dma_claim_unused_channel(true);
     dma_channel_config dma_cfg = dma_channel_get_default_config(dma_chan);
 
     // Reset something in dma_channel_get_default_config.
@@ -172,11 +190,18 @@ void io_init(){
         adc_buffer,             // destination of data
         &adc_hw->fifo,          // source of data
         ADC_BUFFER_DEPTH,       // transfer count
-        true                    // start immediately
+        false                   // don't start immediately
     );
 
-    grbl_print("Starting capture\n");
+    //DAM will raise DMA_IRQ_0 when it finished a block
+    dma_channel_set_irq0_enabled(dma_chan, true);
+
+    //Attach a handler we made to DMA_IRQ_0
+    irq_set_exclusive_handler(DMA_IRQ_0, on_pizo_dma_finished);
+    irq_set_enabled(DMA_IRQ_0, true);
+
     adc_run(true);
+    on_pizo_dma_finished();
 
     // Once DMA finishes, stop any new conversions from starting, and clean up
     // the FIFO in case the ADC was still mid-conversion.
@@ -186,11 +211,17 @@ void io_init(){
     adc_run(false);
     adc_fifo_drain();
     */
-    //Set hall sensor interrupt callback
-    gpio_set_irq_enabled_with_callback(HALL_X_AXIS, GPIO_IRQ_EDGE_FALL, true, on_xy_reach_limit);
-    gpio_set_irq_enabled_with_callback(HALL_Y_AXIS, GPIO_IRQ_EDGE_FALL, true, on_xy_reach_limit);
 
-    drop_gen.enable();
+};
+
+void io_init(){
+
+    pc_uart_init();
+    hall_sensor_init();
+    piezo_adc_init();
+    signal_simulate_init();
+    drop_gen_freq.enable();
+    signal_simulate.enable();
 };
 
 int main(){

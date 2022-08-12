@@ -17,8 +17,8 @@ add_executable(${PROJECT_NAME}
         main.cpp
         Gcode_sender.cpp
         Gcode_sender.h
-        pump.cpp
-        pump.h
+        pwm_unit.cpp
+        pwm_unit.h
 )
 
 # Create map/bin/hex file etc.
